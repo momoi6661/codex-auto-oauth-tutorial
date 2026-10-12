@@ -1,4 +1,6 @@
-# 在 Codex 中一键完成 OAuth 授权
+# Codex 自动 OAuth 教程
+
+配置邮箱与工作区，一键授权并生成 auth 文件。
 
 **中文** | [English](README_EN.md)
 

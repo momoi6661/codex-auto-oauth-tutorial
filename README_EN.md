@@ -1,4 +1,6 @@
-# One-click OAuth Authorization for Codex
+# Codex Auto OAuth Tutorial
+
+Configure a mailbox and workspace, authorize with one click, and generate an auth file.
 
 [中文](README.md) | **English**
 

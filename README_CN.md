@@ -1,4 +1,4 @@
-# 中文文档
+# Codex 自动 OAuth 教程 · 中文文档
 
 [中文](README.md) | [English](README_EN.md)
 

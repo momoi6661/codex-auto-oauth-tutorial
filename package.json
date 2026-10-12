@@ -1,9 +1,9 @@
 {
-  "name": "how-to-oauth-in-codex",
+  "name": "codex-auto-oauth-tutorial",
   "version": "0.1.0",
   "private": false,
   "type": "module",
-  "description": "A small teaching project for one-click Codex OAuth authorization with an email OTP mailbox.",
+  "description": "A runnable tutorial for automatic Codex OAuth with mailbox OTP, workspace selection, and auth-file generation.",
   "license": "(MIT AND LGPL-3.0-only)",
   "engines": { "node": ">=22" },
   "scripts": {
