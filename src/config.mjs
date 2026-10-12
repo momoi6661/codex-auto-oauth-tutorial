@@ -18,6 +18,9 @@ export function loadConfig() {
       waitSeconds: Math.min(180, Math.max(30, Number(process.env.MAILBOX_WAIT_SECONDS || 90))),
       pattern: new RegExp(process.env.OTP_PATTERN || '\\b(\\d{6})\\b')
     },
+    workspaceIndex: Number.isSafeInteger(Number(process.env.WORKSPACE_INDEX || 1))
+      ? Number(process.env.WORKSPACE_INDEX || 1) : 1,
+    expectedAccountId: process.env.EXPECTED_ACCOUNT_ID?.trim() || '',
     output: process.env.OUTPUT_FILE || 'codex-auth.json'
   }
 }

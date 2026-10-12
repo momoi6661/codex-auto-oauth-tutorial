@@ -1,5 +1,7 @@
 # How to OAuth in Codex Automatically
 
+中文说明见 [README_CN.md](README_CN.md)。
+
 This is a small, readable teaching project for the core idea behind one-click
 Codex authorization:
 
