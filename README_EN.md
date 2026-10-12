@@ -19,11 +19,13 @@ Mailbox profile + login email + workspace strategy
 
 This implementation sends real requests. Ten protocol, mailbox, transport, Sentinel and consent files are unchanged from the existing application's corresponding core files. The standalone adaptation removes the panel, database, queue, batch management and custom scripts, and adds configuration, CLI and local UI adapters. The default command runs the complete core, not the smaller teaching examples.
 
-**The authorization protocol follows the same existing implementation, with a complete call chain.** Validation covers mocked authorization and a local Python transport test. This standalone repository has not completed live account acceptance; those tests must not be described as a confirmed live login. Running it requires a valid existing account, mailbox, network and compatible current provider protocol.
+**The authorization protocol follows the same existing implementation, with a complete call chain.** The project maintainer has confirmed successful authorization with a real account. The screenshot below shows the completed flow as a usage reference. Automated tests separately cover mocked authorization and the local Python transport. Configure your own existing account, receiving mailbox and proxy to use it.
 
 ## 1. Use the example UI
 
-![Local one-click authorization UI](ui/screenshot.jpg)
+![Successful one-click authorization example](ui/authorization-success.jpg)
+
+This image shows a completed real-account authorization: select a profile, enter the login email and choose a workspace on the left; watch progress and download credential JSON on the right. The image contributor obscured account details. Use the image as an operating reference.
 
 Requires Node.js 22+ and Python 3.10+. Run from the repository directory:
 
@@ -250,6 +252,8 @@ node --check src/cli.mjs
 ```
 
 The test suite uses mock provider/SDK fixtures for protocol, Sentinel, consent/personal fallback, IMAP, cancellation, task config and UI API coverage. The transport test sends requests to a local server through the actual Python bridge, checking cookies, manual redirects and browser profile. These tests do not send account emails.
+
+Real-account authorization was completed and confirmed by the project maintainer; the example image above shows the successful result.
 
 Unknown pages, registration, MFA, phone, passkey or unsatisfied challenges stop the protocol. Provider or pinned SDK changes may require adapter updates; mock evidence never substitutes for live evidence.
 
