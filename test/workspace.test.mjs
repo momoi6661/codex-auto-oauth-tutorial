@@ -16,3 +16,8 @@ test('automatically falls back to personal when there are no teams', () => {
 test('team index has priority when a team exists', () => {
   assert.equal(chooseWorkspace([personal, team], { index: 1 }).id, 'team-1')
 })
+
+test('a lost team identity falls back only when personal is the sole available choice', () => {
+  assert.equal(chooseWorkspace([personal], { expectedAccountId: 'old-team' }).id, personal.id)
+  assert.throws(() => chooseWorkspace([team, personal], { expectedAccountId: 'old-team' }), /expected account ID/)
+})

@@ -2,3 +2,5 @@
 node_modules/
 codex-auth.json
 *.log
+.venv/
+__pycache__/

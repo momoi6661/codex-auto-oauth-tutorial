@@ -4,14 +4,19 @@
   "private": false,
   "type": "module",
   "description": "A small teaching project for one-click Codex OAuth authorization with an email OTP mailbox.",
-  "license": "MIT",
+  "license": "(MIT AND LGPL-3.0-only)",
+  "engines": { "node": ">=22" },
   "scripts": {
     "authorize": "node src/cli.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test:transport": "node --test test/transport/local.test.mjs",
+    "test": "node --test test/*.test.mjs test/reference-core/*.test.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
+    "htmlparser2": "^10.1.0",
     "imapflow": "^2.4.0",
-    "mailparser": "^3.9.38"
+    "mailparser": "^3.9.38",
+    "node-fetch": "^3.3.2",
+    "tough-cookie": "^6.0.0"
   }
 }

@@ -14,8 +14,9 @@ export function chooseWorkspace(workspaces, { index = 1, expectedAccountId } = {
 
   if (expectedAccountId) {
     const exact = usable.find(item => item.id === expectedAccountId)
-    if (!exact) throw new Error('The expected account ID is not present in the consent workspace list')
-    return exact
+    if (exact) return exact
+    if (!teams.length && personal[0]) return personal[0]
+    throw new Error('The expected account ID is not present in the consent workspace list')
   }
   if (index === 0) {
     if (!personal[0]) throw new Error('No personal workspace is available')

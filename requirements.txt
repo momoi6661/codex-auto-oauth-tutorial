@@ -1,0 +1,2 @@
+# Chrome 142 impersonation is used by the extracted protocol transport.
+curl_cffi==0.14.0

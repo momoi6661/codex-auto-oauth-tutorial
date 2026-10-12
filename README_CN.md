@@ -1,106 +1,163 @@
 # 如何在 Codex 中自动完成 OAuth 授权
 
-这是一个独立的教学项目，拆出了 Codex 一键授权的核心流程：
+[English](README.md)
+
+独立教学项目，已包含从 Sub2API runner 提取的完整协议模块。
+`npm run authorize` 接到 `src/reference-core/`，按配置授权已有账号：
 
 ```text
-配置邮箱 -> 创建 OAuth/PKCE 会话 -> 提交登录邮箱 -> IMAP 读取验证码
--> 校验验证码 -> 选择工作区 -> 换取 OAuth Token -> 保存授权文件
+读取配置 -> IMAP 记录 UID 起点 -> OAuth/PKCE -> 提交邮箱 -> 请求/读取验证码
+-> 校验验证码 -> 团队/个人空间授权 -> 校验回调 state
+-> Token 交换 -> 检查身份 -> 保存授权 JSON
 ```
 
-它不依赖面板，也不包含账号数据库、注册流程或自动绕过安全挑战的逻辑，
-适合给开发者或 AI 参考授权流程。
+可读参考是 Wenfxl-Codex-Manager-v18.2.0 的 OAuth-only 和邮箱流程。
+这里是我们在 runner 中开发的独立实现，不是闭源 auth_core 的源码移植，
+也不包含其编译扩展。[来源和改动](src/reference-core/NOTICE.md)。
 
-## 使用方法
+## 安装与使用
 
-1. 安装 Node.js 20 或更高版本。
-2. 复制 `.env.example` 为 `.env`。
-3. 填写已有 Codex 账号邮箱、IMAP 地址、IMAP 用户名和邮箱应用专用密码。
-4. 执行 `npm install` 和 `npm test`。
-5. 执行 `npm run authorize` 查看授权流程。
+需要 Node.js 22+（推荐 24）、Python 3.10+。在项目目录执行：
 
-当前示例会在 provider 的 consent 页面停止。真实接入时，需要根据当时返回的
-页面读取工作区列表，再提交工作区 ID 并完成 token exchange；不能凭空猜 ID。
+```powershell
+npm ci
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-## 邮箱配置
+填写 .env 中已有账号的登录邮箱、接收验证码的 IMAP 邮箱、用户名、应用专用密码
+和实际收件地址。Windows 设置 `CURL_CFFI_PYTHON=.venv/Scripts/python.exe`。
+Linux/macOS 用 `.venv/bin/python -m pip install -r requirements.txt` 安装，
+并设置 `CURL_CFFI_PYTHON=.venv/bin/python`。
 
-`LOGIN_EMAIL` 是要授权的已有账号。`IMAP_HOST`、`IMAP_USER` 和
-`IMAP_PASSWORD` 是接收验证码的邮箱配置，不是 Codex 登录密码。优先使用邮箱
-服务商提供的应用专用密码。
+```powershell
+npm test
+npm run authorize
+```
 
-读取器会：
+授权命令会发起真实登录，可能发送邮件。成功后保存 codex-auth.json，格式沿用
+runner 的平铺授权文件，不会覆盖 Codex 应用自己的授权文件。不要把 .env、
+邮箱密码、验证码和 Token 文件提交到 Git、发给 AI 或贴到 issue。
 
-- 记录授权开始前的 UID 边界；
-- 以只读模式打开 IMAP；
-- 过滤授权开始时间之后的新邮件；
-- 检查 To、Cc、Delivered-To 等收件人；
-- 按 `OTP_PATTERN` 提取验证码。
+## 配置字段
 
-## 工作区和个人空间自动回退
+| 字段 | 含义 |
+| --- | --- |
+| LOGIN_EMAIL | 要授权的已有 OpenAI/Codex 账号，不创建新账号 |
+| IMAP_HOST / IMAP_PORT | TLS IMAP 服务，默认端口 993 |
+| IMAP_USER / IMAP_PASSWORD | 收信邮箱用户名、应用专用密码，不是 Codex 密码 |
+| IMAP_FOLDER | 验证码文件夹，默认 INBOX |
+| MAILBOX_ADDRESS | 实际收件邮箱，支持转发改写 |
+| OTP_PATTERN | 正则第一个捕获组为验证码 |
+| OTP_SENDER | 可选的精确发件人邮箱过滤 |
+| MAILBOX_WAIT_SECONDS | 收信等待 30–180 秒，默认 90 |
+| EMAIL_RESEND_SECONDS | 等待 10–90 秒后重发一次，默认 30 |
+| WORKSPACE_INDEX | 0 选个人；1 及以上按可用团队列表顺序选 |
+| EXPECTED_ACCOUNT_ID | 可选：重新授权时的旧工作区 ID |
+| AUTH_PROXY_URL | OAuth/Sentinel 的 HTTP/HTTPS/SOCKS 代理，空值直连 |
+| CURL_CFFI_PYTHON | 安装了 curl_cffi 的 Python 路径 |
+| OUTPUT_FILE | 输出文件，默认 codex-auth.json |
 
-`WORKSPACE_INDEX` 的含义：
+本机代理示例：`AUTH_PROXY_URL=http://127.0.0.1:7890`。
+OAuth 和 Sentinel 共用代理和会话，IMAP 仍直连。传输模块不继承系统代理变量，
+需要显式填写 AUTH_PROXY_URL。
 
-- `0`：明确选择个人空间；
-- `1` 及以上：按 consent 页面返回的团队工作区顺序选择。
+## 提取的核心模块
 
-如果配置为 `1`，但当前账号没有任何团队工作区，代码会自动回退到返回列表中
-标记为个人空间的工作区。它不会伪造个人空间 ID，也不会切换到另一个账号。
+| src/reference-core 中的模块 | 作用 |
+| --- | --- |
+| protocol-auth.mjs | PKCE、登录、验证码发送/重发/校验、空间授权、回调、Token 交换和身份检查 |
+| imap-code.mjs | 只读 IMAP、UIDNEXT/UIDVALIDITY、投递时间、收件人/转发地址过滤 |
+| curl-cffi-fetch.mjs / curl-transport.py | 每个任务独立的 Python curl 会话、Chrome 142 TLS 配置 |
+| sentinel.mjs / sentinel-runtime.mjs | 固定版本 SDK 适配，每个受保护请求生成新证据 |
+| consent-form.mjs | 解析表单和 React Router 工作区数据，不执行页面脚本 |
+| executor.mjs / script-process.mjs | 有超时和取消的邮箱子进程，已去掉自定义脚本 |
+| proxy-url.mjs / browser-profile.mjs | 代理标准化、浏览器特征一致性 |
+| index.mjs | 导出入口 |
 
-核心逻辑在 `src/workspace.mjs`：
+src/task.mjs 将配置转换为核心协议的任务参数，接入其他项目时：
 
 ```js
-chooseWorkspace(workspaces, { index: 1 })
+import { loadConfig } from './src/config.mjs'
+import { buildTask } from './src/task.mjs'
+import { authorizeWithProtocol, executeScript } from './src/reference-core/index.mjs'
+
+const result = await authorizeWithProtocol(
+  buildTask(loadConfig()), executeScript, AbortSignal.timeout(600_000),
+  step => console.log(step)
+)
+// 返回 auth_file 或 error；不要打印 result.auth。
 ```
 
-重新授权已有账号时，可以设置 `EXPECTED_ACCOUNT_ID`。如果当前 consent 列表中
-找不到这个 ID，流程应该停止并报告错误，不能静默使用其他账号。
+较短的 pkce.mjs、mailbox.mjs、protocol.mjs、workspace.mjs 是入门拆解。
+简化 protocol 在 consent 阶段停止，不是默认命令调用的实现。完整流程和收信
+隔离应参考 reference-core。
 
-## 验证码不发送的排查
+## 自动回退个人账号
 
-初始邮箱请求的 body 只有：
+默认 1 优先使用第一个可用团队；0 明确选个人，即使团队存在。
+没有可用团队时，使用上游提供的个人空间；若个人账号只有 Continue 表单、
+没有空间选择器，就直接提交该表单，不继续寻找不存在的团队 ID。
+
+重新授权时先查 EXPECTED_ACCOUNT_ID。原团队消失且只剩个人空间时，允许回退。
+Token 邮箱必须仍匹配登录邮箱，账号 ID 必须匹配本次选择的空间；
+合法回退后不能再用旧团队 ID 拒绝新的个人 ID。
+团队仍存在时，越界序号会报错，不静默换到其他团队。
+
+## 提交邮箱后不发送验证码
+
+邮箱 body 只有：
 
 ```json
-{
-  "username": { "value": "owner@example.com", "kind": "email" }
-}
+{ "username": { "value": "owner@example.com", "kind": "email" } }
 ```
 
-`screen_hint: "login"` 不是已经证实的修复；原实现后来明确移除了它。当前最有
-证据支持的遗漏是 `openai-sentinel-token` 请求头。它不是 body 参数，而是每个受
-保护请求动态生成的安全凭证。请求还必须保持同一个：
+这次集成时补上的关键缺失项是 **openai-sentinel-token 请求头**，不是 JSON 参数。
+完整模块为提交邮箱、发送验证码、重发、校验生成新证据，保持同一个设备 ID、
+Cookie 和代理；SDK 提供观察器证据时还发送 openai-sentinel-so-token。
+不能写死，也不能跨账号复用。原实现后来移除了 screen_hint: login，
+不能把缺少它写成不发邮件的原因。
 
-- `oai-device-id`；
-- OAuth 会话 Cookie；
-- `openai-sentinel-token`；
-- provider 要求挑战时的 `openai-sentinel-so-token`。
+代码和 mock 测试证明证据已接入请求，不能仅凭这些证明所有历史投递失败都由
+同一个请求头造成。HTTP 200 不代表邮件已投递。
+密码页使用 /api/accounts/passwordless/send-otp；验证码页等待到配置时间后
+调用 /api/accounts/email-otp/resend 一次，保留原 UID 起点和收信任务。
+成功状态中的 HTML 错误页不会被当成已发送。
 
-这些值不能写死，也不能跨账号复用。HTTP 200 只说明请求被接受，不代表邮件已经
-投递。还要确认是否调用了 `passwordless/send-otp`，并检查邮箱垃圾箱、过滤器和
-收件人别名。
+## 收信和失败处理
 
-## 给 AI 的使用说明
+- 先记录 UID 再触发邮件，避免验证码先到达却被后建的起点漏掉。
+- 按服务器投递时间过滤，UIDVALIDITY 改变时停止，避免复用旧代码。
+- 检查 To、Cc、Delivered-To、X-Original-To 等地址，支持转发改写；共享投递
+  地址不能覆盖另一个明确的登录收件人。
+- 邮箱子进程上限 190 秒，覆盖最长等待，避免外层 30 秒提前截断。
+- 最多重发一次，失败不会循环发送。Ctrl+C 取消，总上限 10 分钟。
+- 缺少空间列表时检查 consent 表单/loader，不编造个人 ID。
+- 邮箱或本次选定的账号 ID 不匹配时丢弃结果。注册、手机验证、MFA、
+  未满足的安全挑战停止并人工处理。
 
-可以把下面的要求交给 AI：
+## 交给 AI 使用
 
-> 先阅读 `.env.example`、`src/protocol.mjs`、`src/mailbox.mjs` 和
-> `src/workspace.mjs`。保持 OAuth state、PKCE verifier、Cookie、设备 ID 和
-> 邮箱 UID 边界只属于当前任务。不要输出密码、Cookie、验证码、access token
-> 或 refresh token。工作区必须使用 consent 页面返回的 ID；没有团队空间时按
-> `chooseWorkspace` 自动回退个人空间。遇到注册、CAPTCHA、MFA、手机号验证或
-> 未知页面时停止并报告，不要伪造成功。最后区分本地测试、真实授权和部署状态。
+> 先读 README_CN.md、src/task.mjs 和 src/reference-core，使用完整模块，
+> 不要把停在 consent 的入门示例当成完整授权器。state、verifier、Cookie、
+> 设备 ID 和邮箱 UID 起点只属于当前任务。为每个请求生成新证据，不写死 Token。
+> 只选上游提供的空间；无团队时走个人空间或个人授权表单。Token 交换后核对
+> 登录邮箱和本次空间 ID。不要输出密码、验证码和 Token。保留只读收信、
+> 一次重发、取消和超时。遇到注册、MFA、手机验证或未知安全挑战停止。
+> 运行测试，区分本地测试、真实授权和 GitHub 推送状态。
 
-## 常见问题
+## 验证和限制
 
-- **收不到邮件**：对比完整请求头，重点检查 Sentinel token、设备 ID、Cookie 和
-  `passwordless/send-otp`；不要只看 HTTP 200。
-- **找不到验证码**：检查 IMAP 文件夹、服务器时间、转发地址和垃圾邮件；不要读
-  授权开始前的旧验证码。
-- **没有团队空间**：使用 `WORKSPACE_INDEX=1`，代码会回退个人空间；`0` 表示
-  明确只选个人空间。
-- **403 或安全挑战**：停止并改为人工授权。本项目不绕过 provider 安全验证。
-- **账号不一致**：验证邮箱或账号 ID 不匹配时丢弃结果，不写入授权文件。
+npm test 包含原流程的协议、Sentinel、consent、邮箱、代理测试及本项目配置测试。
+所有 provider/SDK 响应为模拟数据，不发送真实邮件。
+安装 Python 依赖后可运行 `npm run test:transport`，检查本地 Python 传输桥。
 
-## 范围
+本独立仓库尚未做真实账号授权验收。SDK 适配固定版本 20260219f9f6，
+上游 SDK/接口改变时可能需要更新；不支持的 SDK 或未满足的挑战会停止，
+不伪造成功。不包含面板、账号数据库、注册、自定义脚本、自动队列或重试循环。
 
-本项目可以直接作为代码和流程参考，但不是无需适配即可用于生产的完整授权器。
-Provider 的 consent 页面、Sentinel 生成和 token exchange 可能变化，发布贡献前
-应先用 mock 测试，再做一次受控的真实授权验证。
+## 许可证
+
+原创教学/CLI 文件为 MIT。提取模块和适配的原测试沿用 LGPL v3。
+原许可证、GPL 文本和来源记录在 src/reference-core，分发时请保留。

@@ -1,110 +1,162 @@
 # How to OAuth in Codex Automatically
 
-中文说明见 [README_CN.md](README_CN.md)。
+[中文文档](README_CN.md)
 
-This is a small, readable teaching project for the core idea behind one-click
-Codex authorization:
+A standalone teaching project with the complete protocol implementation extracted
+from the Sub2API runner. `npm run authorize` uses `src/reference-core/`:
 
 ```text
-configuration -> OAuth/PKCE session -> submit email -> read OTP from IMAP
--> validate OTP -> choose the provider workspace -> exchange code for tokens
--> write a Codex authorization file
+config -> IMAP UID snapshot -> OAuth/PKCE -> submit email -> request/read OTP
+-> validate OTP -> team/personal consent -> verify callback state
+-> token exchange -> check identity -> save auth JSON
 ```
 
-It is intentionally separate from a panel or account manager. The repository
-shows how to configure an existing account and mailbox, and where an AI agent
-must stop when the provider asks for a security challenge or a workspace that
-was not returned by the consent page.
+The readable reference was `Wenfxl-Codex-Manager-v18.2.0` (OAuth-only and mailbox
+flows). These are the independent modules developed in our runner, not a port
+of its compiled `auth_core`. See [source and license details](src/reference-core/NOTICE.md).
 
-## Quick start
+## Setup
 
-1. Install Node.js 20 or newer.
-2. Copy `.env.example` to `.env` and fill in an existing Codex login email and
-   an IMAP app password. Never commit `.env` or an auth file.
-3. Run `npm install` and then `npm test`.
-4. Run `npm run authorize` to inspect the flow. The example stops at the
-   provider-owned consent page until you add a current workspace-selection and
-   token-exchange adapter for the provider response you receive.
+Use Node.js 22+ (24 recommended) and Python 3.10+. From this repository directory:
 
-The example is deliberately conservative around the final consent step: the
-provider owns the workspace list. A production adapter should parse the actual
-consent form, submit the returned `workspace_id`, verify the returned account ID,
-then perform the OAuth token exchange. It must never guess a workspace ID.
+```powershell
+npm ci
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-## What the configuration means
+Edit `.env`: set the existing account's login email and the receiving mailbox's
+IMAP host, username, app password and receiving address. On Windows set
+`CURL_CFFI_PYTHON=.venv/Scripts/python.exe`. On Linux/macOS install with
+`.venv/bin/python -m pip install -r requirements.txt` and set
+`CURL_CFFI_PYTHON=.venv/bin/python`.
 
-`LOGIN_EMAIL` is the existing provider account to authorize. `IMAP_HOST`,
-`IMAP_USER`, and `IMAP_PASSWORD` describe the mailbox that receives its OTP;
-these values do not create an OpenAI account. Use a mailbox app password where
-the provider supports one. `OTP_PATTERN` controls how the code is extracted.
-The reader records a fresh UID boundary, reads the mailbox read-only, checks the
-delivery time, and matches the login recipient before accepting a code.
+```powershell
+npm test
+npm run authorize
+```
 
-## The email-submit failure that is easy to misdiagnose
+The authorize command makes a real provider login attempt and can request email.
+On success it writes the runner's flat credential JSON to `codex-auth.json`.
+It does not replace the Codex application's own auth file. Do not commit or post
+`.env`, mailbox passwords, OTPs or token files.
 
-The initial email request is not just an arbitrary JSON post. The current body
-contains only the username:
+## Configuration
+
+| Setting | Meaning |
+| --- | --- |
+| LOGIN_EMAIL | Existing OpenAI/Codex login; no registration |
+| IMAP_HOST / IMAP_PORT | TLS IMAP server; port defaults to 993 |
+| IMAP_USER / IMAP_PASSWORD | Mailbox username and app password |
+| IMAP_FOLDER | Folder containing delivered OTP mail; default INBOX |
+| MAILBOX_ADDRESS | Actual receiving address, including forwarded mail |
+| OTP_PATTERN | Regex with the code in capture group 1 |
+| OTP_SENDER | Optional exact sender email filter |
+| MAILBOX_WAIT_SECONDS | 30–180 seconds; default 90 |
+| EMAIL_RESEND_SECONDS | Resend once after 10–90 seconds; default 30 |
+| WORKSPACE_INDEX | 0 = personal; 1+ = position in offered team list |
+| EXPECTED_ACCOUNT_ID | Optional previous workspace ID |
+| AUTH_PROXY_URL | OAuth/Sentinel HTTP/HTTPS/SOCKS proxy; empty = direct |
+| CURL_CFFI_PYTHON | Interpreter with curl_cffi installed |
+| OUTPUT_FILE | Default codex-auth.json |
+
+For a local proxy use `AUTH_PROXY_URL=http://127.0.0.1:7890`.
+OAuth and Sentinel share one proxy/session; IMAP connects directly.
+The curl transport disables inherited proxy settings: configure this explicitly.
+
+## Extracted modules
+
+| Module in src/reference-core | Responsibility |
+| --- | --- |
+| protocol-auth.mjs | PKCE, login, OTP/resend, workspace consent, callback, token exchange, identity checks |
+| imap-code.mjs | Read-only IMAP, UIDNEXT/UIDVALIDITY, delivery-time and recipient/forwarding filters |
+| curl-cffi-fetch.mjs / curl-transport.py | One Python curl session per task, Chrome 142 TLS profile |
+| sentinel.mjs / sentinel-runtime.mjs | Pinned SDK adapter for fresh request evidence |
+| consent-form.mjs | Forms and React Router workspace data without executing page scripts |
+| executor.mjs / script-process.mjs | Bounded mailbox child process; custom scripts excluded |
+| proxy-url.mjs / browser-profile.mjs | Proxy normalization and consistent browser identity |
+| index.mjs | Module exports |
+
+`src/task.mjs` maps configuration to the extracted task interface:
+
+```js
+import { loadConfig } from './src/config.mjs'
+import { buildTask } from './src/task.mjs'
+import { authorizeWithProtocol, executeScript } from './src/reference-core/index.mjs'
+
+const result = await authorizeWithProtocol(
+  buildTask(loadConfig()), executeScript, AbortSignal.timeout(600_000),
+  step => console.log(step)
+)
+// result.type is auth_file or error. Never log result.auth.
+```
+
+The smaller pkce.mjs, mailbox.mjs, protocol.mjs and workspace.mjs are introductory
+examples. The simplified protocol stops at consent; it is not the CLI's
+implementation. Use reference-core for the complete flow and mailbox isolation.
+
+## Personal fallback
+
+Index 1 prefers the first enabled team; 0 explicitly selects personal even with
+teams available. With no enabled teams, use the provider-offered personal space.
+A personal-only Continue form without a picker is submitted directly; never
+invent an ID or keep searching for a nonexistent workspace list.
+
+Reauthorization preserves EXPECTED_ACCOUNT_ID when offered. If the old team
+disappears and only personal remains, the core can fall back to that identity.
+The returned email must still match the login; the token account ID must match
+the selected workspace. Do not reject a legitimate fallback because its personal
+ID differs from the old team ID. An out-of-range team index fails when teams
+exist rather than silently selecting another team.
+
+## Email submission and Sentinel
+
+Email submission uses this body:
 
 ```json
-{
-  "username": { "value": "owner@example.com", "kind": "email" }
-}
+{ "username": { "value": "owner@example.com", "kind": "email" } }
 ```
 
-`screen_hint: "login"` is not a confirmed fix. In the reference project's
-history it was explicitly removed. The strongest evidence points to the missing
-item being **`openai-sentinel-token`**. This is a request header, not a JSON body
-field. The protected POST must preserve the same session cookie and device ID
-and include the provider's current security evidence headers. The flow uses
-`oai-device-id`, `openai-sentinel-token`, and, when required by the challenge,
-`openai-sentinel-so-token`.
-Those values are generated per request; they are not static configuration.
+The key missing item added during integration was **openai-sentinel-token**,
+a request header, not a JSON field. Email submission, OTP send, resend and
+validation each get fresh evidence tied to the same device ID and cookies.
+Observer evidence is also sent as openai-sentinel-so-token when supplied by the
+SDK. screen_hint: login was removed upstream; its absence is not the established
+explanation for missing mail.
 
-The same session must then call `passwordless/send-otp` when the returned page is
-the password page. A 200 response only means that the request was accepted; it
-does not prove mail delivery. Check the response page and the full request
-headers before diagnosing IMAP or mailbox delivery.
+Code changes and mock tests show the headers are carried; they do not alone
+prove one header caused every past delivery failure. HTTP 200 is not delivery
+confirmation. Password pages use /api/accounts/passwordless/send-otp; the OTP
+page resends once via /api/accounts/email-otp/resend while preserving the reader
+and original UID snapshot. HTML API error pages are rejected before waiting.
 
-## Giving this to an AI agent
+## Giving this to an AI
 
-Give the agent the repository path and ask it to:
+> Read this README, src/task.mjs and src/reference-core first. Use the full core,
+> not the incomplete introductory protocol. Keep state, verifier, cookies,
+> device ID and UID snapshot task-local. Generate evidence for each protected
+> request; never hard-code tokens. Select only offered workspaces and follow
+> personal fallback or the personal-only form. Check login email and selected
+> account ID after exchange. Never print secrets or tokens. Preserve read-only
+> mail, one resend and cancellation. Stop on registration, MFA, phone
+> verification or an unsupported challenge. Report mock tests and live
+> authorization separately.
 
-1. Read `.env.example`, `src/protocol.mjs`, and `src/mailbox.mjs` first.
-2. Keep OAuth state, PKCE verifier, cookies, device ID, and mailbox UID
-   snapshot inside one task; never reuse them across accounts.
-3. Use the exact configured mailbox and recipient, and never print passwords,
-   cookies, authorization codes, access tokens, or refresh tokens.
-4. Treat registration, CAPTCHA, MFA, phone verification, and unknown consent
-   pages as manual steps. Do not bypass them or invent a successful result.
-5. Verify the returned email and account ID before writing `codex-auth.json`.
-6. Run `npm test` and report local tests, real provider authorization, and any
-   deployment or GitHub push as separate facts.
+## Validation and limits
 
-Useful prompt:
+npm test includes adapted upstream protocol, Sentinel, consent, mailbox and
+proxy tests plus configuration tests. Provider/SDK responses are fixtures;
+tests send no mail. Install Python requirements first, then run
+`npm run test:transport` for a local Python bridge check.
 
-> Explain the existing Codex OAuth flow in this repository. Make only the
-> requested change. Preserve the email-submit payload, session cookies, device
-> header, PKCE state, and read-only mailbox behavior. Show the test result and
-> clearly distinguish a local mock test from a real provider authorization.
+The CLI has a ten-minute deadline and Ctrl+C cancellation. This standalone repo
+has not undergone real-account acceptance. The SDK adapter pins version
+20260219f9f6; SDK/API changes can require updates. Unsupported SDKs or unsatisfied
+challenges stop without fabricating evidence. No panel, account database,
+registration, custom scripts, task queue or automatic retry loop is included.
 
-## Safety and troubleshooting
+## License
 
-- **No email:** compare the full request with a known working flow: device ID,
-  session cookie, current security evidence headers, and the
-  `passwordless/send-otp` step. HTTP 200 alone is insufficient. Do not add
-  `screen_hint` unless the provider's current request proves it is required.
-- **No matching message:** check IMAP folder, server time, recipient aliases,
-  forwarding headers, spam rules, and the UID snapshot. Do not read old codes.
-- **Workspace error:** use only IDs returned by the current consent page. Personal
-  space is a provider result, not a hard-coded ID.
-- **403 or challenge:** stop and ask for manual authorization. This project does
-  not bypass provider security controls.
-- **Wrong account:** discard the result if the verified email or account ID does
-  not match the requested account.
-
-## Scope
-
-This repository contains the educational core only. It does not include a web
-panel, automatic retry queue, account database, registration flow, or provider
-security-challenge bypass. Adapt the final consent and token-exchange adapter to
-the current provider response, then review it before publishing a contribution.
+Original teaching/CLI files: MIT. Extracted core and adapted upstream tests:
+LGPL v3. Source attribution and license texts are in src/reference-core.
