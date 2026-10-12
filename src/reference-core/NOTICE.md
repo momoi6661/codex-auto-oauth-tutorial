@@ -1,25 +1,13 @@
-# Source and changes
+# 模块边界与许可证
 
-These modules were extracted on 2026-10-12 from
-[momoi6661/sub2api](https://github.com/momoi6661/sub2api),
-`tools/reauth-runner/`, at checkout `34f77e8ce3e19852a776d3d27efa7fc6cde64ef2`.
-The last commit affecting that runner was
-`4c130721ec67909217e11eac572ac168ee6572bb`.
-The upstream license is LGPL version 3; its text is retained in `LICENSE`,
-with the incorporated GPL text in `COPYING`.
-The MIT license at the repository root applies to the original teaching files;
-it does not relicense these copied modules or the adapted upstream tests.
+**中文** | [English](NOTICE_EN.md)
 
-This is the independent protocol implementation developed in that runner with
-guidance from the readable `Wenfxl-Codex-Manager-v18.2.0` OAuth-only and mailbox
-flows. It is not a source port of the reference's compiled `auth_core` extension;
-no compiled reference module is included.
+本目录的协议核心及对应测试使用 LGPL v3；完整 LGPL 文本保留在 `LICENSE`，其包含的 GPL 文本在 `COPYING`。根目录 MIT 许可证适用于独立教学文件和 UI/CLI 适配层，不将这些核心模块重新许可为 MIT。
 
-Local changes: the mailbox child process accepts IMAP tasks only. Custom script
-execution, direct custom auth-file returns, and their proxy adapter are excluded.
-The original internal name `executeScript` is retained for protocol compatibility.
-Tests are adapted only for import paths and to omit the custom auth-file test.
+独立执行链保留 OAuth/PKCE、IMAP 验证码、curl_cffi 传输、Sentinel、consent、工作区回退及身份检查。`script-process.mjs` 只接受 IMAP 任务，去除了自定义脚本执行、直接返回自定义授权文件及其专用代理适配。`executeScript` 名称仅用于调用接口兼容。`index.mjs` 是独立导出入口。
 
-The Sentinel SDK is downloaded at runtime by the protocol module, not vendored.
-The synthetic SDK in `test/reference-core/sentinel-fixture.mjs` is a mock used
-only for local tests and never generates credentials for a real provider.
+项目不包含面板、数据库、账号批处理、任务队列和编译的 `auth_core`。
+
+Sentinel SDK 在运行时下载，没有打包在仓库中。测试中的 `sentinel-fixture.mjs` 仅模拟 SDK 行为，不能生成真实服务的授权凭据，也不用于真实请求。
+
+分发时请保留适用的许可证文本，并遵守修改和分发对应模块的许可证要求。

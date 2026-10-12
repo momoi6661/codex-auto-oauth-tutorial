@@ -4,3 +4,4 @@ codex-auth.json
 *.log
 .venv/
 __pycache__/
+.local/

@@ -7,6 +7,7 @@
   "license": "(MIT AND LGPL-3.0-only)",
   "engines": { "node": ">=22" },
   "scripts": {
+    "ui": "node src/ui-server.mjs",
     "authorize": "node src/cli.mjs",
     "test:transport": "node --test test/transport/local.test.mjs",
     "test": "node --test test/*.test.mjs test/reference-core/*.test.mjs"

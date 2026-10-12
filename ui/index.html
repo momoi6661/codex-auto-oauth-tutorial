@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="session-token" content="__SESSION_TOKEN__">
+  <title>Codex 一键授权</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;color:#25302b;background:#f4f6f3;font-size:15px}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1020px;margin:48px auto;padding:0 24px}
+    header{margin-bottom:30px}.eyebrow{font-size:12px;letter-spacing:2px;font-weight:700;color:#597060}h1{font-size:32px;letter-spacing:-1px;margin:10px 0}h2{font-size:19px;margin:0 0 18px}
+    p{line-height:1.7}.muted,.hint{color:#68766f}.hint{font-size:12px;margin:7px 0 14px}.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:20px}
+    .card{background:white;border:1px solid #e0e7df;border-radius:16px;padding:26px;box-shadow:0 5px 20px #25302b05}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px}.fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fields label{margin:0}
+    label{display:block;font-size:13px;font-weight:600;margin:18px 0 8px}input,select{font:inherit;color:inherit;background:#fff;border:1px solid #cfd9ce;border-radius:8px;padding:11px 12px;width:100%;margin-top:6px}
+    input:focus,select:focus{outline:2px solid #b8d3bf;border-color:#42664c}button{cursor:pointer;font:inherit;border:1px solid #d7dfd5;border-radius:8px;background:#fff;padding:10px 15px;color:#304d39}
+    button:hover{background:#f1f6ef}button:disabled{cursor:default;opacity:.5}.primary{background:#284e37;color:white;border-color:#284e37}.primary:hover{background:#1a3c28}.actions{display:flex;gap:10px;margin-top:23px;flex-wrap:wrap}
+    .primary.wide{flex:1}.badge{font-size:12px;border-radius:20px;padding:5px 10px;background:#eef4eb;color:#55714e}.status{margin-top:20px}.log{padding:0;list-style:none;max-height:310px;overflow:auto;margin:0}.log li{padding:9px 0;border-bottom:1px solid #edf1ec;font-size:13px}.log li:before{content:'✓';color:#4b805d;margin-right:9px}
+    .notice{font-size:12px;color:#77837a;margin-top:22px}.error{color:#a03735;overflow-wrap:anywhere}[hidden]{display:none!important}details{margin-top:20px}summary{cursor:pointer;font-size:13px;color:#587060}
+    dialog{border:1px solid #dde5d9;border-radius:16px;padding:26px;width:min(590px,95vw);max-height:90vh}dialog::backdrop{background:#12251c55}.dialog-title{margin-bottom:20px}.dialog-title h2{margin:0}
+    footer{font-size:12px;color:#829087;margin-top:26px}a{color:#46674e}.success{color:#2f7343}.other{margin-top:8px}
+    @media(max-width:720px){main{margin:26px auto;padding:0 16px}.grid{grid-template-columns:1fr}.fields{grid-template-columns:1fr}.card{padding:22px}h1{font-size:27px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="eyebrow">CODEX · OAUTH</span>
+    <h1>配置一次，轻松完成授权。</h1>
+    <p class="muted">选择收信配置，填写账号邮箱，再选择工作区。其余步骤自动完成。</p>
+  </header>
+  <div class="grid">
+    <section class="card">
+      <div class="row"><h2>一键授权</h2><span class="badge">已有账号</span></div>
+      <form id="authorize-form">
+        <fieldset id="auth-fields" style="border:0;margin:0;padding:0">
+          <div class="row"><label for="profile">授权配置</label><div><button type="button" id="edit-profile">编辑</button> <button type="button" id="new-profile">＋ 新建</button></div></div>
+          <select id="profile" required aria-label="授权配置"></select>
+          <p class="hint" id="profile-hint">先新建一个用于接收验证码的邮箱配置。</p>
+          <label for="email">要授权的账号邮箱</label>
+          <input id="email" type="email" required maxlength="254" placeholder="name@example.com" autocomplete="email">
+          <label for="workspace">工作区</label>
+          <select id="workspace">
+            <option value="1">优先第一个团队（无团队自动回退个人）</option>
+            <option value="0">个人空间</option>
+            <option value="other">其他团队 · 按序号选择</option>
+          </select>
+          <label id="team-field" class="other" hidden>团队序号<input id="team-index" type="number" min="1" step="1" value="2"></label>
+          <p class="hint">团队按本次授权返回的顺序选择。这里不是预先查询到的团队列表。</p>
+          <details><summary>重新授权选项</summary><label for="expected">原工作区 ID（可选）</label><input id="expected" placeholder="留空按上面的工作区选项授权"><p class="hint">填写后优先保持原身份；原团队消失且只剩个人空间时允许回退。</p></details>
+        </fieldset>
+        <p id="form-error" role="alert" class="error" hidden></p>
+        <div class="actions"><button class="primary wide" id="start" type="submit">一键授权</button><button type="button" id="cancel" hidden>取消</button></div>
+      </form>
+      <p class="notice">点击后会真实发起登录，可能发送验证码。仅授权已有账号，不创建新账号。</p>
+    </section>
+    <section class="card" aria-live="polite">
+      <div class="row"><h2>授权进度</h2><span class="badge" id="state">等待开始</span></div>
+      <p class="muted" id="empty">邮箱配置保存后可以重复使用。授权过程中可随时取消。</p>
+      <ol class="log" id="progress"></ol>
+      <p id="job-error" role="alert" class="error" hidden></p>
+      <div id="result" hidden><p class="success" id="identity"></p><button class="primary" id="download" type="button">下载授权 JSON</button><p class="hint">已同时保存在本机 .local 目录。下载不会重复授权。</p></div>
+    </section>
+  </div>
+  <footer>本机示范 UI · 配置和授权文件保存在 .local（含敏感信息，请勿分享）· 不覆盖 Codex 应用登录状态</footer>
+</main>
+<dialog id="editor">
+  <form id="profile-form">
+    <div class="row dialog-title"><h2 id="editor-title">新建授权配置</h2><button type="button" id="close-editor" aria-label="关闭">关闭</button></div>
+    <label>配置名称<input name="name" required maxlength="120" placeholder="例如：我的收信邮箱"></label>
+    <div class="fields">
+      <label>IMAP 服务器<input name="IMAP_HOST" required placeholder="imap.example.com"></label>
+      <label>端口（TLS）<input name="IMAP_PORT" required type="number" min="1" max="65535" value="993"></label>
+    </div>
+    <label>IMAP 用户名<input name="IMAP_USER" required placeholder="you@example.com" autocomplete="username"></label>
+    <label>邮箱应用专用密码<input name="IMAP_PASSWORD" type="password" autocomplete="new-password" required></label>
+    <p class="hint" id="password-hint">用于读取验证码邮件，不是 Codex 密码。</p>
+    <label>实际收件地址<input name="MAILBOX_ADDRESS" type="email" placeholder="留空使用 IMAP 用户名"></label>
+    <label>授权代理（可选）<input name="AUTH_PROXY_URL" placeholder="http://127.0.0.1:7890"></label>
+    <details><summary>验证码与收信设置</summary>
+      <div class="fields"><label>文件夹<input name="IMAP_FOLDER" value="INBOX"></label><label>发件人过滤（可选）<input name="OTP_SENDER" type="email"></label></div>
+      <label>验证码正则（第一个捕获组）<input name="OTP_PATTERN" value="\b(\d{6})\b" required></label>
+      <div class="fields"><label>收信等待（秒）<input name="MAILBOX_WAIT_SECONDS" type="number" min="30" max="180" value="90" required></label><label>重发一次的时间（秒）<input name="EMAIL_RESEND_SECONDS" type="number" min="10" max="90" value="30" required></label></div>
+    </details>
+    <p id="profile-error" role="alert" class="error" hidden></p>
+    <div class="actions"><button class="primary" id="save-profile" type="submit">保存并选择</button><button type="button" id="delete-profile" hidden>删除配置</button></div>
+  </form>
+</dialog>
+<script type="module">
+const $ = id => document.getElementById(id)
+const token = document.querySelector('meta[name="session-token"]').content
+const stages = { preparing:'检查授权配置', mailbox_connect:'连接邮箱并记录新邮件起点', protocol_start:'建立 OAuth / PKCE 会话', email_login:'提交登录邮箱', requesting_code:'请求验证码', waiting_code:'等待新的验证码邮件', submitting_code:'校验验证码', consent:'选择工作区并确认授权', token_exchange:'交换 Token 并核对身份', saved:'授权文件已保存' }
+let profiles = [], editingId = '', busy = false, submitting = false, pollTimer
+async function api(path, body) {
+  const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST',
+    headers: { 'x-session-token': token, ...(body === undefined ? {} : {'Content-Type':'application/json'}) },
+    ...(body === undefined ? {} : {body:JSON.stringify(body)}) })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error || '请求失败')
+  return data
+}
+function error(id, message = '') { $(id).textContent = message; $(id).hidden = !message }
+function selectedProfile() { return profiles.find(p => p.id === $('profile').value) }
+function profileHint() {
+  const profile = selectedProfile()
+  $('profile-hint').textContent = profile ? `${profile.settings.IMAP_HOST} · ${profile.settings.IMAP_USER}` : '先新建一个用于接收验证码的邮箱配置。'
+  $('edit-profile').disabled = busy || !profile
+  $('start').disabled = busy || !profile
+}
+async function loadProfiles(selectedId = $('profile').value) {
+  profiles = await api('/api/profiles')
+  $('profile').replaceChildren()
+  if (!profiles.length) $('profile').add(new Option('暂无配置，请点击新建', ''))
+  for (const profile of profiles) $('profile').add(new Option(profile.name, profile.id))
+  if (profiles.some(p => p.id === selectedId)) $('profile').value = selectedId
+  profileHint()
+}
+function openEditor(profile) {
+  editingId = profile?.id || ''
+  $('profile-form').reset()
+  $('profile-form').elements.namedItem('name').value = profile?.name || ''
+  for (const [key, value] of Object.entries(profile?.settings || {})) $('profile-form').elements.namedItem(key).value = value
+  const password = $('profile-form').elements.namedItem('IMAP_PASSWORD')
+  password.value = ''; password.required = !profile?.hasPassword
+  $('password-hint').textContent = profile?.hasPassword ? '密码已保存，留空保留原密码。' : '用于读取验证码邮件，不是 Codex 密码。'
+  $('editor-title').textContent = profile ? '编辑授权配置' : '新建授权配置'
+  $('delete-profile').hidden = !profile
+  error('profile-error'); $('editor').showModal()
+}
+$('new-profile').onclick = () => openEditor()
+$('edit-profile').onclick = () => openEditor(selectedProfile())
+$('close-editor').onclick = () => $('editor').close()
+$('profile').onchange = profileHint
+$('workspace').onchange = () => { $('team-field').hidden = $('workspace').value !== 'other'; $('team-index').required = !$('team-field').hidden }
+$('profile-form').onsubmit = async event => {
+  event.preventDefault(); error('profile-error'); $('save-profile').disabled = true
+  try {
+    const settings = Object.fromEntries(new FormData(event.target)), name = settings.name
+    delete settings.name
+    const saved = await api('/api/profiles', { id:editingId || undefined, name, settings })
+    $('profile-form').elements.namedItem('IMAP_PASSWORD').value = ''
+    await loadProfiles(saved.id); $('editor').close()
+  } catch (e) { error('profile-error', e.message) }
+  finally { $('save-profile').disabled = false }
+}
+$('delete-profile').onclick = async () => {
+  if (!confirm('删除这个授权配置？已生成的授权文件会保留。')) return
+  try { await api('/api/profiles/delete', {id:editingId}); await loadProfiles(); $('editor').close() }
+  catch (e) { error('profile-error', e.message) }
+}
+function renderJob(job) {
+  if (!job) return
+  busy = job.status === 'running'
+  $('auth-fields').disabled = busy; $('cancel').hidden = !busy
+  $('state').textContent = ({running:'正在授权',failed:'授权停止',succeeded:'授权完成'})[job.status]
+  $('start').textContent = busy ? '正在授权…' : '一键授权'
+  $('empty').hidden = true; $('result').hidden = !job.downloadReady
+  $('progress').replaceChildren(...job.stages.map(stage => { const li=document.createElement('li');li.textContent=stages[stage]||stage;return li }))
+  error('job-error', job.error ? `${job.error.code} · ${job.error.message}` : '')
+  if (job.downloadReady) $('identity').textContent = `${job.email} · 工作区 ${job.accountId}`
+  profileHint()
+  clearTimeout(pollTimer)
+  if (busy) pollTimer = setTimeout(poll, 1000)
+}
+async function poll() {
+  try { renderJob(await api('/api/job')); error('form-error') }
+  catch (e) { error('form-error', `读取进度失败：${e.message}。刷新页面可恢复查看，任务不会重复提交。`); if (busy) pollTimer=setTimeout(poll,3000) }
+}
+$('authorize-form').onsubmit = async event => {
+  event.preventDefault(); if (busy || submitting) return
+  submitting = true
+  error('form-error'); $('start').disabled = true; $('auth-fields').disabled = true
+  try { renderJob(await api('/api/job', {profileId:$('profile').value, email:$('email').value,
+    workspaceIndex:$('workspace').value === 'other' ? Number($('team-index').value) : Number($('workspace').value), expectedAccountId:$('expected').value.trim()})) }
+  catch (e) { error('form-error',e.message); $('auth-fields').disabled = false; profileHint() }
+  finally { submitting = false }
+}
+$('cancel').onclick = async () => {
+  try { $('cancel').disabled=true; renderJob(await api('/api/job/cancel', {})) }
+  catch (e) { error('form-error', e.message) }
+  finally { $('cancel').disabled=false }
+}
+$('download').onclick = async () => {
+  try {
+    const response=await fetch('/api/job/auth',{headers:{'x-session-token':token}})
+    if (!response.ok) throw new Error('读取授权文件失败')
+    const url=URL.createObjectURL(await response.blob()), link=document.createElement('a')
+    link.href=url;link.download='codex-auth.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+  } catch (e) { error('job-error',e.message) }
+}
+try { await loadProfiles(); await poll() } catch (e) { error('form-error',e.message) }
+</script>
+</body>
+</html>
