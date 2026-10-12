@@ -50,10 +50,12 @@ contains only the username:
 ```
 
 `screen_hint: "login"` is not a confirmed fix. In the reference project's
-history it was explicitly removed. The protected POST must instead preserve the
-same session cookie and device ID and include the provider's current security
-evidence headers. The extracted implementation added `oai-device-id`,
-`openai-sentinel-token`, and, when required by the challenge,`openai-sentinel-so-token`.
+history it was explicitly removed. The strongest evidence points to the missing
+item being **`openai-sentinel-token`**. This is a request header, not a JSON body
+field. The protected POST must preserve the same session cookie and device ID
+and include the provider's current security evidence headers. The flow uses
+`oai-device-id`, `openai-sentinel-token`, and, when required by the challenge,
+`openai-sentinel-so-token`.
 Those values are generated per request; they are not static configuration.
 
 The same session must then call `passwordless/send-otp` when the returned page is
