@@ -38,25 +38,28 @@ the provider supports one. `OTP_PATTERN` controls how the code is extracted.
 The reader records a fresh UID boundary, reads the mailbox read-only, checks the
 delivery time, and matches the login recipient before accepting a code.
 
-## The email-submit failure that is easy to miss
+## The email-submit failure that is easy to misdiagnose
 
-The initial email request is not just an arbitrary JSON post. The working
-request carries the session cookie and device header and includes the login
-hint:
+The initial email request is not just an arbitrary JSON post. The current body
+contains only the username:
 
 ```json
 {
-  "username": { "value": "owner@example.com", "kind": "email" },
-  "screen_hint": "login"
+  "username": { "value": "owner@example.com", "kind": "email" }
 }
 ```
 
-In the version that failed to trigger an email, `screen_hint` was omitted. The
-server could accept the request and return HTTP 200 while no OTP was scheduled.
+`screen_hint: "login"` is not a confirmed fix. In the reference project's
+history it was explicitly removed. The protected POST must instead preserve the
+same session cookie and device ID and include the provider's current security
+evidence headers. The extracted implementation added `oai-device-id`,
+`openai-sentinel-token`, and, when required by the challenge,`openai-sentinel-so-token`.
+Those values are generated per request; they are not static configuration.
+
 The same session must then call `passwordless/send-otp` when the returned page is
 the password page. A 200 response only means that the request was accepted; it
-does not prove mail delivery. Check the provider response page, then inspect the
-mailbox and its filters.
+does not prove mail delivery. Check the response page and the full request
+headers before diagnosing IMAP or mailbox delivery.
 
 ## Giving this to an AI agent
 
@@ -82,8 +85,10 @@ Useful prompt:
 
 ## Safety and troubleshooting
 
-- **No email:** confirm `screen_hint: login`, the device header, the same session
-  cookie, and the `passwordless/send-otp` step. HTTP 200 alone is insufficient.
+- **No email:** compare the full request with a known working flow: device ID,
+  session cookie, current security evidence headers, and the
+  `passwordless/send-otp` step. HTTP 200 alone is insufficient. Do not add
+  `screen_hint` unless the provider's current request proves it is required.
 - **No matching message:** check IMAP folder, server time, recipient aliases,
   forwarding headers, spam rules, and the UID snapshot. Do not read old codes.
 - **Workspace error:** use only IDs returned by the current consent page. Personal

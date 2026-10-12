@@ -5,7 +5,7 @@ const ORIGIN = 'https://auth.openai.com'
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const REDIRECT_URI = 'http://localhost:1455/auth/callback'
 
-export async function oneClickAuthorize({ email, readCode, fetchImpl = fetch, report = () => {} }) {
+export async function oneClickAuthorize({ email, readCode, fetchImpl = fetch, report = () => {}, securityHeaders = async () => ({}) }) {
   const { state, verifier, challenge } = createPkce()
   const cookies = new Map()
   const startedAt = new Date().toISOString()
@@ -20,7 +20,11 @@ export async function oneClickAuthorize({ email, readCode, fetchImpl = fetch, re
       headers: {
         Accept: 'application/json, text/html',
         Origin: ORIGIN,
-        ...(options.method === 'POST' ? { 'Content-Type': 'application/json', 'oai-device-id': deviceId } : {}),
+        ...(options.method === 'POST' ? {
+          'Content-Type': 'application/json',
+          'oai-device-id': deviceId,
+          ...(await securityHeaders({ path: url.pathname, deviceId }))
+        } : {}),
         ...(cookies.size ? { Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join('; ') } : {}),
         ...(options.headers || {})
       }
@@ -39,14 +43,14 @@ export async function oneClickAuthorize({ email, readCode, fetchImpl = fetch, re
   if (location) page = await request(location)
 
   report('submit_email')
-  // `screen_hint=login` is part of the email-submit contract used by the
-  // reference Codex flow. Omitting it can leave the request accepted while no
-  // OTP message is scheduled. Keep the device header and session cookies too.
+  // The email body is intentionally only the username. The current flow
+  // authenticates the request with the session cookie, device ID, and provider
+  // security headers. Do not invent `screen_hint`; the reference integration
+  // removed that field.
   page = await request('/api/accounts/authorize/continue', {
     method: 'POST',
     body: JSON.stringify({
-      username: { value: email, kind: 'email' },
-      screen_hint: 'login'
+      username: { value: email, kind: 'email' }
     })
   })
   let data = await page.json()
