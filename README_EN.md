@@ -37,7 +37,7 @@ $env:CURL_CFFI_PYTHON = ".venv/Scripts/python.exe"
 npm run ui
 ```
 
-Open **http://127.0.0.1:17855**, as printed in the terminal:
+Open the [local authorization page (http://127.0.0.1:17855)](http://127.0.0.1:17855), as printed in the terminal:
 
 1. Click 新建 (New). Save a profile name, IMAP host, username and mailbox app password.
 2. Select that profile and enter the existing OpenAI/Codex account's login email.
