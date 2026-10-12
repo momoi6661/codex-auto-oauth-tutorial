@@ -1,0 +1,4 @@
+.env
+node_modules/
+codex-auth.json
+*.log

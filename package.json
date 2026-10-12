@@ -1,0 +1,17 @@
+{
+  "name": "how-to-oauth-in-codex",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "A small teaching project for one-click Codex OAuth authorization with an email OTP mailbox.",
+  "license": "MIT",
+  "scripts": {
+    "authorize": "node src/cli.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "imapflow": "^2.4.0",
+    "mailparser": "^3.9.38"
+  }
+}
